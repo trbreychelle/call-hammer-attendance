@@ -17,55 +17,57 @@
 
     <div id="loginView" class="flex items-center justify-center min-h-screen">
         <div class="bg-white p-8 rounded-2xl shadow-xl w-80 text-center">
-            <h1 class="text-2xl font-bold mb-6">CHL Portal</h1>
-            <input type="email" id="email" placeholder="Email" class="w-full mb-3 p-2 border rounded">
-            <input type="password" id="password" placeholder="Password" class="w-full mb-4 p-2 border rounded">
-            <button onclick="handleLogin()" class="w-full bg-chl-blue text-white py-2 rounded font-bold">LOGIN</button>
-            <p id="errorMsg" class="text-red-500 mt-2 hidden text-sm">Invalid login.</p>
+            <h1 class="text-2xl font-bold mb-6 text-gray-800">CHL Portal</h1>
+            <input type="email" id="email" placeholder="Email" class="w-full mb-3 p-2 border rounded outline-none focus:ring-2 focus:ring-blue-500">
+            <input type="password" id="password" placeholder="Password" class="w-full mb-4 p-2 border rounded outline-none focus:ring-2 focus:ring-blue-500">
+            <button id="loginBtn" onclick="handleLogin()" class="w-full bg-chl-blue text-white py-2 rounded font-bold hover:bg-blue-700 transition">LOGIN</button>
+            <p id="errorMsg" class="text-red-500 mt-4 hidden text-sm font-medium"></p>
         </div>
     </div>
 
     <div id="dashboard" class="hidden p-6 max-w-4xl mx-auto">
-        <div class="bg-white p-6 rounded-xl shadow-md mb-6 flex justify-between items-center">
+        <div class="bg-white p-6 rounded-xl shadow-md mb-6 flex justify-between items-center border-l-8 border-blue-600">
             <div>
-                <h2 class="text-xl font-bold">Hello, <span id="agentNameDisplay">Agent</span></h2>
+                <h2 class="text-xl font-bold">Hello, <span id="agentNameDisplay" class="text-blue-600">Agent</span></h2>
                 <p id="statusDisplay" class="text-gray-500">Status: Offline</p>
             </div>
             <div class="flex gap-2">
-                <button id="adminGear" onclick="toggleSettings()" class="hidden p-2 bg-gray-100 rounded">⚙️</button>
-                <button onclick="logout()" class="p-2 text-red-600 font-bold">LOGOUT</button>
+                <button id="adminGear" onclick="toggleSettings()" class="hidden p-2 bg-gray-100 rounded">⚙️ Settings</button>
+                <button onclick="logout()" class="p-2 text-red-600 font-bold hover:underline">LOGOUT</button>
             </div>
         </div>
 
         <div class="bg-white p-10 rounded-3xl shadow-2xl text-center mb-6">
-            <div id="timer" class="text-6xl font-bold mb-8">00:00:00</div>
+            <div id="timer" class="text-6xl font-bold mb-8 text-gray-800">00:00:00</div>
             <div class="grid grid-cols-2 gap-4">
-                <button onclick="sendAction('Clock In')" class="bg-chl-blue text-white py-4 rounded-xl font-bold">CLOCK IN</button>
-                <button onclick="sendAction('Break Start')" class="bg-chl-yellow py-4 rounded-xl font-bold">START BREAK</button>
-                <button onclick="sendAction('Resume')" class="bg-chl-blue text-white py-4 rounded-xl font-bold">RESUME</button>
-                <button onclick="sendAction('Clock Out')" class="bg-chl-red text-white py-4 rounded-xl font-bold">CLOCK OUT</button>
+                <button onclick="sendAction('Clock In')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 transition">CLOCK IN</button>
+                <button onclick="sendAction('Break Start')" class="bg-chl-yellow py-4 rounded-xl font-bold shadow-lg hover:scale-105 transition">START BREAK</button>
+                <button onclick="sendAction('Resume')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 transition">RESUME</button>
+                <button onclick="sendAction('Clock Out')" class="bg-chl-red text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 transition">CLOCK OUT</button>
             </div>
         </div>
 
         <div id="adminMonitor" class="hidden bg-white p-6 rounded-xl shadow-md">
-            <h3 class="font-bold mb-4">Live Team Status</h3>
-            <div id="teamList" class="space-y-2 text-sm">Loading team status...</div>
+            <h3 class="font-bold mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 bg-green-500 rounded-full"></span> Live Team Status
+            </h3>
+            <div id="teamList" class="space-y-2 text-sm">Waiting for data...</div>
         </div>
     </div>
 
-    <div id="idleModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-xl text-center">
+    <div id="idleModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
+        <div class="bg-white p-8 rounded-xl text-center max-w-sm">
             <h2 class="text-xl font-bold mb-4">Still there?</h2>
-            <div id="countdown" class="text-4xl text-red-600 mb-4">60</div>
-            <button onclick="resetIdle()" class="bg-chl-blue text-white px-6 py-2 rounded">I'M WORKING</button>
+            <p class="text-gray-600 mb-4">You've been idle for 15 minutes. The timer will stop soon.</p>
+            <div id="countdown" class="text-4xl font-bold text-red-600 mb-6">60</div>
+            <button onclick="resetIdle()" class="w-full bg-chl-blue text-white px-6 py-3 rounded-lg font-bold">I'M WORKING</button>
         </div>
     </div>
 
     <script>
-        // CONFIG - CHANGE THESE TO YOUR HETZNER WEBHOOKS
-        const WEBHOOK_AUTH = "https://your-n8n.com/webhook/auth";
-        const WEBHOOK_ACTION = "https://your-n8n.com/webhook/action";
-        const WEBHOOK_MONITOR = "https://your-n8n.com/webhook/monitor";
+        // CONFIG - Using your provided n8n URL
+        const WEBHOOK_AUTH = "https://automate.callhammerleads.com/webhook-test/auth";
+        const WEBHOOK_ACTION = "https://automate.callhammerleads.com/webhook/action"; // Update this when you have the production one
 
         let currentUser = null;
         let timer = null;
@@ -73,28 +75,59 @@
         let idleTime = 0;
 
         async function handleLogin() {
-            const email = document.getElementById('email').value;
+            const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
-            const res = await fetch(WEBHOOK_AUTH, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
-            if (data.authenticated) {
-                currentUser = data;
-                document.getElementById('loginView').classList.add('hidden');
-                document.getElementById('dashboard').classList.remove('hidden');
-                document.getElementById('agentNameDisplay').innerText = data.name;
-                if(data.role === 'admin') {
-                    document.getElementById('adminGear').classList.remove('hidden');
-                    document.getElementById('adminMonitor').classList.remove('hidden');
-                    fetchTeamStatus();
-                }
-                startIdleTracker();
-            } else {
-                document.getElementById('errorMsg').classList.remove('hidden');
+            const loginBtn = document.getElementById('loginBtn');
+            const errorMsg = document.getElementById('errorMsg');
+
+            if (!email || !password) {
+                showError("Please enter email and password.");
+                return;
             }
+
+            try {
+                loginBtn.innerText = "Verifying...";
+                loginBtn.disabled = true;
+                errorMsg.classList.add('hidden');
+
+                const res = await fetch(WEBHOOK_AUTH, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (!res.ok) throw new Error("Server error");
+
+                const data = await res.json();
+
+                if (data.authenticated) {
+                    currentUser = data;
+                    document.getElementById('loginView').classList.add('hidden');
+                    document.getElementById('dashboard').classList.remove('hidden');
+                    document.getElementById('agentNameDisplay').innerText = data.name || "Agent";
+                    
+                    // Show admin tools if role is admin
+                    if(data.role === 'admin') {
+                        document.getElementById('adminGear').classList.remove('hidden');
+                        document.getElementById('adminMonitor').classList.remove('hidden');
+                    }
+                    startIdleTracker();
+                } else {
+                    showError("Invalid email or password.");
+                }
+            } catch (err) {
+                showError("Connection failed. Check your n8n workflow.");
+                console.error(err);
+            } finally {
+                loginBtn.innerText = "LOGIN";
+                loginBtn.disabled = false;
+            }
+        }
+
+        function showError(msg) {
+            const errorMsg = document.getElementById('errorMsg');
+            errorMsg.innerText = msg;
+            errorMsg.classList.remove('hidden');
         }
 
         function updateTimer() {
@@ -109,25 +142,31 @@
         async function sendAction(act) {
             document.getElementById('statusDisplay').innerText = "Status: " + act;
             if(act === 'Clock In' && !timer) timer = setInterval(updateTimer, 1000);
-            if(act === 'Clock Out') { clearInterval(timer); timer = null; sec = 0; document.getElementById('timer').innerText = "00:00:00"; }
+            if(act === 'Clock Out') { 
+                clearInterval(timer); 
+                timer = null; 
+                sec = 0; 
+                document.getElementById('timer').innerText = "00:00:00"; 
+            }
             
-            await fetch(WEBHOOK_ACTION, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ 
-                    agent: currentUser.name, 
-                    email: currentUser.email, 
-                    action: act, 
-                    timestamp: new Date().toLocaleString() 
-                })
-            });
+            try {
+                await fetch(WEBHOOK_ACTION, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        agent: currentUser.name, 
+                        email: currentUser.email, 
+                        action: act, 
+                        timestamp: new Date().toISOString() 
+                    })
+                });
+            } catch (e) { console.error("Action log failed", e); }
         }
 
-        // IDLE LOGIC
         function startIdleTracker() {
             setInterval(() => {
                 idleTime++;
-                if (idleTime >= 15) { // 15 Minutes
+                if (idleTime >= 15) { 
                    document.getElementById('idleModal').classList.remove('hidden');
                 }
             }, 60000);
@@ -140,14 +179,8 @@
             document.getElementById('idleModal').classList.add('hidden');
         }
 
-        async function fetchTeamStatus() {
-            const res = await fetch(WEBHOOK_MONITOR);
-            const data = await res.json();
-            document.getElementById('teamList').innerHTML = data.map(a => 
-                `<div class="flex justify-between border-b py-1"><span>${a.name}</span><b>${a.status}</b></div>`).join('');
-        }
-
         function logout() { location.reload(); }
+        function toggleSettings() { alert("Admin Settings: Activity Tracking is ON (15m)"); }
     </script>
 </body>
 </html>
