@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Call Hammer Leads - Attendance</title>
+    <title>Call Hammer Leads - Attendance Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #FEF3C7; font-family: sans-serif; }
@@ -11,6 +11,7 @@
         .bg-chl-blue { background-color: #2563EB; }
         .bg-chl-red { background-color: #DC2626; }
         .hidden { display: none !important; }
+        .admin-border { border-left: 8px solid #2563EB; }
     </style>
 </head>
 <body class="min-h-screen">
@@ -26,53 +27,60 @@
     </div>
 
     <div id="dashboard" class="hidden p-6 max-w-4xl mx-auto">
-        <div class="bg-white p-6 rounded-xl shadow-md mb-6 flex justify-between items-center border-l-8 border-blue-600">
+        <div class="bg-white p-6 rounded-xl shadow-md mb-6 flex justify-between items-center admin-border">
             <div>
                 <h2 class="text-xl font-bold">Hello, <span id="agentNameDisplay" class="text-blue-600">Agent</span></h2>
-                <p id="statusDisplay" class="text-gray-500">Status: Offline</p>
+                <p id="statusDisplay" class="text-gray-500 font-medium text-sm">Status: Offline</p>
             </div>
             <div class="flex gap-2">
-                <button id="adminGear" onclick="toggleSettings()" class="hidden p-2 bg-gray-100 rounded">⚙️ Settings</button>
+                <button id="adminGear" onclick="toggleSettings()" class="hidden p-2 bg-gray-100 rounded hover:bg-gray-200 transition">⚙️ Settings</button>
                 <button onclick="logout()" class="p-2 text-red-600 font-bold hover:underline">LOGOUT</button>
             </div>
         </div>
 
         <div class="bg-white p-10 rounded-3xl shadow-2xl text-center mb-6">
-            <div id="timer" class="text-6xl font-bold mb-8 text-gray-800">00:00:00</div>
+            <div id="timer" class="text-7xl font-bold mb-8 text-gray-800 tracking-tight">00:00:00</div>
             <div class="grid grid-cols-2 gap-4">
-                <button onclick="sendAction('Clock In')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 transition">CLOCK IN</button>
-                <button onclick="sendAction('Break Start')" class="bg-chl-yellow py-4 rounded-xl font-bold shadow-lg hover:scale-105 transition">START BREAK</button>
-                <button onclick="sendAction('Resume')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 transition">RESUME</button>
-                <button onclick="sendAction('Clock Out')" class="bg-chl-red text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 transition">CLOCK OUT</button>
+                <button onclick="sendAction('Clock In')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition">CLOCK IN</button>
+                <button onclick="sendAction('Break Start')" class="bg-chl-yellow text-gray-800 py-4 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition">START BREAK</button>
+                <button onclick="sendAction('Resume')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition">RESUME</button>
+                <button onclick="sendAction('Clock Out')" class="bg-chl-red text-white py-4 rounded-xl font-bold shadow-lg hover:scale-105 active:scale-95 transition">CLOCK OUT</button>
             </div>
         </div>
 
-        <div id="adminMonitor" class="hidden bg-white p-6 rounded-xl shadow-md">
-            <h3 class="font-bold mb-4 flex items-center gap-2">
-                <span class="w-2 h-2 bg-green-500 rounded-full"></span> Live Team Status
-            </h3>
-            <div id="teamList" class="space-y-2 text-sm">Waiting for data...</div>
+        <div id="adminMonitor" class="hidden bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-600">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg flex items-center gap-2 text-gray-800">
+                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Team Live Status
+                </h3>
+                <span class="text-xs text-gray-400">Refreshes every 60s</span>
+            </div>
+            <div id="teamList" class="space-y-3">
+                <div class="text-center text-gray-400 py-4 italic text-sm">Fetching team activity...</div>
+            </div>
         </div>
     </div>
 
-    <div id="idleModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50">
-        <div class="bg-white p-8 rounded-xl text-center max-w-sm">
-            <h2 class="text-xl font-bold mb-4">Still there?</h2>
-            <p class="text-gray-600 mb-4">You've been idle for 15 minutes. The timer will stop soon.</p>
-            <div id="countdown" class="text-4xl font-bold text-red-600 mb-6">60</div>
-            <button onclick="resetIdle()" class="w-full bg-chl-blue text-white px-6 py-3 rounded-lg font-bold">I'M WORKING</button>
+    <div id="idleModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-xl text-center max-w-sm shadow-2xl">
+            <h2 class="text-2xl font-bold mb-4 text-gray-800">Still working?</h2>
+            <p class="text-gray-600 mb-6 text-sm">You've been idle for 15 minutes. To avoid being auto-clocked out, please click the button below.</p>
+            <div id="countdown" class="text-5xl font-bold text-red-600 mb-8">60</div>
+            <button onclick="resetIdle()" class="w-full bg-chl-blue text-white px-6 py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition">I'M WORKING</button>
         </div>
     </div>
 
     <script>
-        // CONFIG - Using your provided n8n URL
+        // CONFIG - UPDATED WEBHOOKS
         const WEBHOOK_AUTH = "https://automate.callhammerleads.com/webhook/auth";
-        const WEBHOOK_ACTION = "https://automate.callhammerleads.com/webhook-test/action"; // Update this when you have the production one
+        const WEBHOOK_ACTION = "https://automate.callhammerleads.com/webhook/action";
+        const WEBHOOK_MONITOR = "https://automate.callhammerleads.com/webhook-test/get_team_status";
 
         let currentUser = null;
         let timer = null;
         let sec = 0;
         let idleTime = 0;
+        let monitorInterval = null;
 
         async function handleLogin() {
             const email = document.getElementById('email').value.trim();
@@ -96,8 +104,7 @@
                     body: JSON.stringify({ email, password })
                 });
 
-                if (!res.ok) throw new Error("Server error");
-
+                if (!res.ok) throw new Error("Auth failed");
                 const data = await res.json();
 
                 if (data.authenticated) {
@@ -106,17 +113,18 @@
                     document.getElementById('dashboard').classList.remove('hidden');
                     document.getElementById('agentNameDisplay').innerText = data.name || "Agent";
                     
-                    // Show admin tools if role is admin
                     if(data.role === 'admin') {
                         document.getElementById('adminGear').classList.remove('hidden');
                         document.getElementById('adminMonitor').classList.remove('hidden');
+                        fetchTeamStatus();
+                        monitorInterval = setInterval(fetchTeamStatus, 60000);
                     }
                     startIdleTracker();
                 } else {
                     showError("Invalid email or password.");
                 }
             } catch (err) {
-                showError("Connection failed. Check your n8n workflow.");
+                showError("Connection failed. Check your n8n server.");
                 console.error(err);
             } finally {
                 loginBtn.innerText = "LOGIN";
@@ -124,10 +132,35 @@
             }
         }
 
-        function showError(msg) {
-            const errorMsg = document.getElementById('errorMsg');
-            errorMsg.innerText = msg;
-            errorMsg.classList.remove('hidden');
+        async function fetchTeamStatus() {
+            try {
+                const res = await fetch(WEBHOOK_MONITOR);
+                const list = await res.json();
+                const teamListDiv = document.getElementById('teamList');
+                
+                if (list.length === 0) {
+                    teamListDiv.innerHTML = '<div class="text-center text-gray-400 text-sm italic">No recent logs found.</div>';
+                    return;
+                }
+
+                teamListDiv.innerHTML = list.map(agent => `
+                    <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg border-b border-gray-100">
+                        <div class="flex flex-col">
+                            <span class="font-bold text-gray-800">${agent.name}</span>
+                            <span class="text-[10px] text-gray-400 uppercase tracking-widest">${agent.time}</span>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase ${getStatusClass(agent.status)}">
+                            ${agent.status}
+                        </span>
+                    </div>
+                `).join('');
+            } catch (e) { console.error("Monitor error", e); }
+        }
+
+        function getStatusClass(status) {
+            if (status.includes("Clock In") || status.includes("Resume")) return "bg-green-100 text-green-700 border border-green-200";
+            if (status.includes("Break")) return "bg-yellow-100 text-yellow-700 border border-yellow-200";
+            return "bg-red-100 text-red-700 border border-red-200";
         }
 
         function updateTimer() {
@@ -143,9 +176,7 @@
             document.getElementById('statusDisplay').innerText = "Status: " + act;
             if(act === 'Clock In' && !timer) timer = setInterval(updateTimer, 1000);
             if(act === 'Clock Out') { 
-                clearInterval(timer); 
-                timer = null; 
-                sec = 0; 
+                clearInterval(timer); timer = null; sec = 0; 
                 document.getElementById('timer').innerText = "00:00:00"; 
             }
             
@@ -160,15 +191,14 @@
                         timestamp: new Date().toISOString() 
                     })
                 });
-            } catch (e) { console.error("Action log failed", e); }
+                if (currentUser.role === 'admin') fetchTeamStatus();
+            } catch (e) { console.error("Log failed", e); }
         }
 
         function startIdleTracker() {
             setInterval(() => {
                 idleTime++;
-                if (idleTime >= 15) { 
-                   document.getElementById('idleModal').classList.remove('hidden');
-                }
+                if (idleTime >= 15) document.getElementById('idleModal').classList.remove('hidden');
             }, 60000);
             document.onmousemove = () => idleTime = 0;
             document.onkeypress = () => idleTime = 0;
@@ -179,8 +209,18 @@
             document.getElementById('idleModal').classList.add('hidden');
         }
 
-        function logout() { location.reload(); }
-        function toggleSettings() { alert("Admin Settings: Activity Tracking is ON (15m)"); }
+        function logout() { 
+            clearInterval(monitorInterval);
+            location.reload(); 
+        }
+
+        function showError(msg) {
+            const errorMsg = document.getElementById('errorMsg');
+            errorMsg.innerText = msg;
+            errorMsg.classList.remove('hidden');
+        }
+
+        function toggleSettings() { alert("Admin Activity Tracking: ACTIVE (15 Min Threshold)"); }
     </script>
 </body>
 </html>
