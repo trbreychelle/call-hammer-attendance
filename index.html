@@ -30,21 +30,29 @@
         <div class="bg-white p-6 rounded-xl shadow-md mb-6 flex justify-between items-center border-l-8 border-blue-600">
             <div>
                 <h2 class="text-xl font-bold text-gray-800">Hello, <span id="agentNameDisplay">Agent</span></h2>
-                <p id="statusDisplay" class="text-gray-500 text-sm italic">Status: Offline</p>
+                <p id="statusDisplay" class="text-gray-500 text-sm italic font-bold">Status: Offline</p>
             </div>
             <div class="flex gap-4">
-                <button id="adminSettingsBtn" onclick="toggleSettingsModal()" class="hidden bg-gray-100 p-2 rounded-lg font-bold text-gray-600 hover:bg-gray-200">⚙️ Global Settings</button>
+                <button id="adminSettingsBtn" onclick="toggleSettingsModal()" class="hidden bg-gray-100 p-2 rounded-lg font-bold text-gray-600 hover:bg-gray-200">⚙️ Settings</button>
                 <button onclick="logout()" class="p-2 text-red-600 font-bold hover:underline">LOGOUT</button>
             </div>
         </div>
 
         <div class="bg-white p-10 rounded-3xl shadow-2xl text-center mb-6">
-            <div id="timer" class="text-7xl font-bold mb-8 text-gray-800 tracking-tight">00:00:00</div>
+            <div class="text-xs uppercase tracking-widest text-gray-400 font-bold mb-1">Effective Working Hours</div>
+            <div id="timer" class="text-7xl font-bold mb-6 text-gray-800 tracking-tight">00:00:00</div>
+            
+            <div id="breakTimerContainer" class="hidden mb-8 p-4 bg-yellow-50 rounded-2xl inline-block border border-yellow-200">
+                <div class="text-[10px] uppercase font-bold text-yellow-600 mb-1">Break Duration (20m Paid)</div>
+                <div id="breakTimer" class="text-3xl font-mono font-bold text-yellow-700">00:00:00</div>
+                <div id="deductionNotice" class="text-[10px] text-red-500 font-bold mt-1 hidden">EXCESS BREAK BEING DEDUCTED</div>
+            </div>
+
             <div class="grid grid-cols-2 gap-4">
-                <button onclick="sendAction('Clock In')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition">CLOCK IN</button>
-                <button onclick="sendAction('Break Start')" class="bg-chl-yellow text-gray-800 py-4 rounded-xl font-bold shadow-lg active:scale-95 transition">START BREAK</button>
-                <button onclick="sendAction('Resume')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition">RESUME</button>
-                <button onclick="sendAction('Clock Out')" class="bg-chl-red text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition">CLOCK OUT</button>
+                <button id="btnClockIn" onclick="sendAction('Clock In')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition">CLOCK IN</button>
+                <button id="btnBreak" onclick="sendAction('Break Start')" class="bg-chl-yellow text-gray-800 py-4 rounded-xl font-bold shadow-lg active:scale-95 transition hidden">START BREAK</button>
+                <button id="btnResume" onclick="sendAction('Resume')" class="bg-chl-blue text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition hidden">RESUME WORK</button>
+                <button id="btnClockOut" onclick="sendAction('Clock Out')" class="bg-chl-red text-white py-4 rounded-xl font-bold shadow-lg active:scale-95 transition hidden">CLOCK OUT</button>
             </div>
         </div>
 
@@ -86,7 +94,6 @@
     <div id="idleModal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 backdrop-blur-sm">
         <div class="bg-white p-8 rounded-xl text-center max-w-sm shadow-2xl">
             <h2 class="text-2xl font-bold mb-4">Still working?</h2>
-            <p class="text-gray-600 mb-6">You've been idle for a while. To avoid being auto-clocked out, click below.</p>
             <button onclick="resetIdle()" class="w-full bg-chl-blue text-white px-6 py-4 rounded-xl font-bold text-lg">I'M WORKING</button>
         </div>
     </div>
@@ -96,9 +103,16 @@
         const WEBHOOK_ACTION = "https://automate.callhammerleads.com/webhook/action";
         const WEBHOOK_MONITOR = "https://automate.callhammerleads.com/webhook/get_team_status";
         
+        const MAX_PAID_BREAK = 20 * 60; // 20 minutes in seconds
+
         let currentUser = null;
-        let timerInterval = null;
-        let secondsElapsed = 0;
+        let mainInterval = null;
+        
+        let currentState = 'OFFLINE'; // OFFLINE, WORKING, BREAK
+        let totalWorkSeconds = 0;
+        let totalBreakSeconds = 0;
+        let lastTimestamp = null; 
+
         let idleMinutes = 0;
         let allAgentsData = [];
         let globalSettings = { enabled: true, threshold: 15 };
@@ -110,7 +124,7 @@
 
         function startIdleTracker() {
             setInterval(() => {
-                if (currentUser && currentUser.role !== 'admin' && globalSettings.enabled) {
+                if (currentUser && currentUser.role !== 'admin' && globalSettings.enabled && currentState === 'WORKING') {
                     idleMinutes++;
                     if (idleMinutes >= globalSettings.threshold) {
                         document.getElementById('idleModal').classList.remove('hidden');
@@ -120,20 +134,6 @@
             document.onmousemove = () => idleMinutes = 0;
             document.onkeypress = () => idleMinutes = 0;
         }
-
-        async function saveGlobalSettings() {
-            globalSettings.enabled = document.getElementById('trackerToggle').checked;
-            globalSettings.threshold = parseInt(document.getElementById('trackerTime').value);
-            await fetch(WEBHOOK_ACTION, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action: "UPDATE_SETTINGS", settings: globalSettings })
-            });
-            toggleSettingsModal();
-            alert("Settings Updated for Team");
-        }
-
-        function toggleSettingsModal() { document.getElementById('settingsModal').classList.toggle('hidden'); }
 
         async function handleLogin() {
             const email = document.getElementById('email').value.trim();
@@ -163,49 +163,146 @@
             }
         }
 
-        function startTimer() {
-            if (timerInterval) clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                secondsElapsed++;
-                updateTimerDisplay();
-                if (secondsElapsed % 5 === 0) saveSession();
+        function runUIUpdate() {
+            if (mainInterval) clearInterval(mainInterval);
+            mainInterval = setInterval(() => {
+                const now = Date.now();
+                const diffInSeconds = Math.floor((now - lastTimestamp) / 1000);
+
+                let currentWork = totalWorkSeconds;
+                let currentBreak = totalBreakSeconds;
+
+                if (currentState === 'WORKING') {
+                    currentWork += diffInSeconds;
+                } else if (currentState === 'BREAK') {
+                    currentBreak += diffInSeconds;
+                }
+
+                // Logic: Deduct excess break time from work hours
+                let deduction = 0;
+                if (currentBreak > MAX_PAID_BREAK) {
+                    deduction = currentBreak - MAX_PAID_BREAK;
+                    document.getElementById('deductionNotice').classList.remove('hidden');
+                    document.getElementById('breakTimer').classList.add('text-red-600');
+                } else {
+                    document.getElementById('deductionNotice').classList.add('hidden');
+                    document.getElementById('breakTimer').classList.remove('text-red-600');
+                }
+
+                document.getElementById('timer').innerText = formatTime(currentWork - deduction);
+                document.getElementById('breakTimer').innerText = formatTime(currentBreak);
             }, 1000);
         }
 
-        function updateTimerDisplay() {
-            let h = Math.floor(secondsElapsed / 3600);
-            let m = Math.floor((secondsElapsed % 3600) / 60);
-            let s = secondsElapsed % 60;
-            document.getElementById('timer').innerText = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        function formatTime(totalSeconds) {
+            const secs = Math.max(0, totalSeconds);
+            let h = Math.floor(secs / 3600);
+            let m = Math.floor((secs % 3600) / 60);
+            let s = secs % 60;
+            return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
         }
 
         async function sendAction(act) {
-            document.getElementById('statusDisplay').innerText = "Status: " + act;
-            if (act === 'Clock In' || act === 'Resume') startTimer();
-            else { clearInterval(timerInterval); timerInterval = null; }
-            if (act === 'Clock Out') { secondsElapsed = 0; updateTimerDisplay(); localStorage.removeItem('chl_session'); }
+            const now = Date.now();
+            
+            // Bank current time before state switch
+            if (lastTimestamp) {
+                const diff = Math.floor((now - lastTimestamp) / 1000);
+                if (currentState === 'WORKING') totalWorkSeconds += diff;
+                if (currentState === 'BREAK') totalBreakSeconds += diff;
+            }
+
+            if (act === 'Clock In') {
+                currentState = 'WORKING';
+                totalWorkSeconds = 0;
+                totalBreakSeconds = 0;
+            } else if (act === 'Break Start') {
+                currentState = 'BREAK';
+            } else if (act === 'Resume') {
+                currentState = 'WORKING';
+            } else if (act === 'Clock Out') {
+                currentState = 'OFFLINE';
+                clearInterval(mainInterval);
+                localStorage.removeItem('chl_session');
+            }
+
+            lastTimestamp = now;
+            updateUIForState();
+            if (currentState !== 'OFFLINE') runUIUpdate();
             saveSession();
+
             await fetch(WEBHOOK_ACTION, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ agent: currentUser.name, email: currentUser.email, action: act, timestamp: new Date().toISOString() })
+                body: JSON.stringify({ 
+                    agent: currentUser.name, 
+                    email: currentUser.email, 
+                    action: act, 
+                    timestamp: new Date().toISOString() 
+                })
             });
             if (currentUser.role === 'admin') fetchTeamStatus();
         }
 
+        function updateUIForState() {
+            const statusDisp = document.getElementById('statusDisplay');
+            const breakCont = document.getElementById('breakTimerContainer');
+            
+            const btnIn = document.getElementById('btnClockIn');
+            const btnBreak = document.getElementById('btnBreak');
+            const btnResume = document.getElementById('btnResume');
+            const btnOut = document.getElementById('btnClockOut');
+
+            if (currentState === 'WORKING') {
+                statusDisp.innerText = "Status: Working";
+                statusDisp.className = "text-green-600 text-sm italic font-bold";
+                breakCont.classList.add('hidden');
+                btnIn.classList.add('hidden');
+                btnBreak.classList.remove('hidden');
+                btnResume.classList.add('hidden');
+                btnOut.classList.remove('hidden');
+            } else if (currentState === 'BREAK') {
+                statusDisp.innerText = "Status: On Break";
+                statusDisp.className = "text-yellow-600 text-sm italic font-bold";
+                breakCont.classList.remove('hidden');
+                btnIn.classList.add('hidden');
+                btnBreak.classList.add('hidden');
+                btnResume.classList.remove('hidden');
+                btnOut.classList.remove('hidden');
+            } else {
+                statusDisp.innerText = "Status: Offline";
+                statusDisp.className = "text-gray-500 text-sm italic font-bold";
+                breakCont.classList.add('hidden');
+                btnIn.classList.remove('hidden');
+                btnBreak.classList.add('hidden');
+                btnResume.classList.add('hidden');
+                btnOut.classList.add('hidden');
+                document.getElementById('timer').innerText = "00:00:00";
+            }
+        }
+
         function saveSession() {
-            if (currentUser) localStorage.setItem('chl_session', JSON.stringify({ user: currentUser, seconds: secondsElapsed, status: document.getElementById('statusDisplay').innerText, isRunning: !!timerInterval, lastSaved: Date.now() }));
+            if (currentUser) localStorage.setItem('chl_session', JSON.stringify({ 
+                user: currentUser, 
+                totalWorkSeconds, 
+                totalBreakSeconds, 
+                lastTimestamp, 
+                currentState 
+            }));
         }
 
         function loadSession() {
             const saved = localStorage.getItem('chl_session');
             if (saved) {
                 const s = JSON.parse(saved);
-                currentUser = s.user; secondsElapsed = s.seconds;
-                if (s.isRunning) { secondsElapsed += Math.floor((Date.now() - s.lastSaved) / 1000); startTimer(); }
+                currentUser = s.user;
+                totalWorkSeconds = s.totalWorkSeconds;
+                totalBreakSeconds = s.totalBreakSeconds;
+                lastTimestamp = s.lastTimestamp;
+                currentState = s.currentState;
                 showDashboard();
-                document.getElementById('statusDisplay').innerText = s.status;
-                updateTimerDisplay();
+                updateUIForState();
+                if (currentState !== 'OFFLINE') runUIUpdate();
             }
         }
 
@@ -220,7 +317,7 @@
         function renderAgents(agents) {
             const listDiv = document.getElementById('teamList');
             if (!agents || agents.length === 0) {
-                listDiv.innerHTML = '<div class="col-span-full text-center text-gray-400 py-4 italic">No agents found. Check n8n.</div>';
+                listDiv.innerHTML = '<div class="col-span-full text-center text-gray-400 py-4 italic">No agents found.</div>';
                 return;
             }
             listDiv.innerHTML = agents.map(a => `
@@ -228,14 +325,13 @@
                     <div class="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold mb-2">${a.name ? a.name.charAt(0) : '?'}</div>
                     <span class="font-bold text-gray-800 text-sm mb-1">${a.name || 'Unknown'}</span>
                     <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase ${getStatusClass(a.status)}">${a.status || 'Offline'}</span>
-                    <span class="text-[9px] text-gray-400 mt-2 italic">Sync: ${a.time || '--:--'}</span>
                 </div>
             `).join('');
         }
 
         function getStatusClass(s) {
             if (!s) return "bg-gray-100 text-gray-500";
-            if (s.includes("Clock In") || s.includes("Resume")) return "bg-green-100 text-green-700 border border-green-200";
+            if (s.includes("In") || s.includes("Resume") || s.includes("Working")) return "bg-green-100 text-green-700 border border-green-200";
             if (s.includes("Break")) return "bg-yellow-100 text-yellow-700 border border-yellow-200";
             return "bg-gray-100 text-gray-500 border border-gray-200";
         }
@@ -245,6 +341,19 @@
             renderAgents(allAgentsData.filter(a => (a.name || "").toLowerCase().includes(q)));
         }
 
+        async function saveGlobalSettings() {
+            globalSettings.enabled = document.getElementById('trackerToggle').checked;
+            globalSettings.threshold = parseInt(document.getElementById('trackerTime').value);
+            await fetch(WEBHOOK_ACTION, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: "UPDATE_SETTINGS", settings: globalSettings })
+            });
+            toggleSettingsModal();
+            alert("Settings Updated");
+        }
+
+        function toggleSettingsModal() { document.getElementById('settingsModal').classList.toggle('hidden'); }
         function resetIdle() { idleMinutes = 0; document.getElementById('idleModal').classList.add('hidden'); }
         function logout() { localStorage.removeItem('chl_session'); location.reload(); }
     </script>
