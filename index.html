@@ -23,6 +23,7 @@
             <input type="email" id="email" placeholder="Email" class="w-full mb-3 p-2 border rounded outline-none focus:ring-2 focus:ring-blue-500">
             <input type="password" id="password" placeholder="Password" class="w-full mb-4 p-2 border rounded outline-none focus:ring-2 focus:ring-blue-500">
             <button onclick="handleLogin()" class="w-full bg-chl-blue text-white py-2 rounded font-bold hover:bg-blue-700 transition">LOGIN</button>
+            <p class="text-[11px] text-gray-500 mt-4 leading-tight">To connect your own n8n + Google Sheets webhooks, open this page with <code class="font-mono bg-gray-100 px-1 rounded">?auth=&lt;url&gt;&amp;action=&lt;url&gt;&amp;monitor=&lt;url&gt;</code> once. The URLs will be saved automatically.</p>
         </div>
     </div>
 
@@ -85,6 +86,22 @@
                         <option value="30">30 Minutes</option>
                     </select>
                 </div>
+                <div class="bg-gray-50 border rounded-xl p-4 space-y-3 text-sm text-left">
+                    <div class="font-bold text-gray-700 text-sm">n8n webhook endpoints</div>
+                    <div class="space-y-2">
+                        <label class="block text-xs font-semibold text-gray-500">Auth</label>
+                        <input id="webhookAuth" class="w-full p-2 border rounded bg-white text-xs" readonly>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-xs font-semibold text-gray-500">Action</label>
+                        <input id="webhookAction" class="w-full p-2 border rounded bg-white text-xs" readonly>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-xs font-semibold text-gray-500">Monitor</label>
+                        <input id="webhookMonitor" class="w-full p-2 border rounded bg-white text-xs" readonly>
+                    </div>
+                    <p class="text-[11px] text-gray-500 leading-tight">These URLs come from query parameters or your saved browser settings. Open the portal with your n8n webhook URLs once to update them; no code edits needed.</p>
+                </div>
                 <button onclick="saveGlobalSettings()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mt-4">SAVE SETTINGS</button>
                 <button onclick="toggleSettingsModal()" class="w-full text-gray-400 font-bold mt-2">Cancel</button>
             </div>
@@ -99,9 +116,23 @@
     </div>
 
     <script>
-        const WEBHOOK_AUTH = "https://automate.callhammerleads.com/webhook/auth";
-        const WEBHOOK_ACTION = "https://automate.callhammerleads.com/webhook/action";
-        const WEBHOOK_MONITOR = "https://automate.callhammerleads.com/webhook/get_team_status";
+        const DEFAULT_WEBHOOKS = {
+            auth: "https://automate.callhammerleads.com/webhook/auth",
+            action: "https://automate.callhammerleads.com/webhook/action",
+            monitor: "https://automate.callhammerleads.com/webhook/get_team_status"
+        };
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const storedWebhooks = JSON.parse(localStorage.getItem('chl_webhooks') || '{}');
+        const WEBHOOKS = {
+            auth: urlParams.get('auth') || storedWebhooks.auth || DEFAULT_WEBHOOKS.auth,
+            action: urlParams.get('action') || storedWebhooks.action || DEFAULT_WEBHOOKS.action,
+            monitor: urlParams.get('monitor') || storedWebhooks.monitor || DEFAULT_WEBHOOKS.monitor,
+        };
+
+        if (urlParams.get('auth') || urlParams.get('action') || urlParams.get('monitor')) {
+            localStorage.setItem('chl_webhooks', JSON.stringify(WEBHOOKS));
+        }
         
         const MAX_PAID_BREAK = 20 * 60; // 20 minutes in seconds
 
@@ -138,7 +169,7 @@
         async function handleLogin() {
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
-            const res = await fetch(WEBHOOK_AUTH, {
+            const res = await fetch(WEBHOOKS.auth, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ email, password })
@@ -158,9 +189,16 @@
             if (currentUser.role === 'admin') {
                 document.getElementById('adminMonitor').classList.remove('hidden');
                 document.getElementById('adminSettingsBtn').classList.remove('hidden');
+                populateWebhookFields();
                 fetchTeamStatus();
                 setInterval(fetchTeamStatus, 60000);
             }
+        }
+
+        function populateWebhookFields() {
+            document.getElementById('webhookAuth').value = WEBHOOKS.auth;
+            document.getElementById('webhookAction').value = WEBHOOKS.action;
+            document.getElementById('webhookMonitor').value = WEBHOOKS.monitor;
         }
 
         function runUIUpdate() {
@@ -231,7 +269,7 @@
             if (currentState !== 'OFFLINE') runUIUpdate();
             saveSession();
 
-            await fetch(WEBHOOK_ACTION, {
+            await fetch(WEBHOOKS.action, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ 
@@ -308,7 +346,7 @@
 
         async function fetchTeamStatus() {
             try {
-                const res = await fetch(WEBHOOK_MONITOR);
+                const res = await fetch(WEBHOOKS.monitor);
                 allAgentsData = await res.json();
                 renderAgents(allAgentsData);
             } catch (e) { console.error("Refresh error", e); }
@@ -344,7 +382,7 @@
         async function saveGlobalSettings() {
             globalSettings.enabled = document.getElementById('trackerToggle').checked;
             globalSettings.threshold = parseInt(document.getElementById('trackerTime').value);
-            await fetch(WEBHOOK_ACTION, {
+            await fetch(WEBHOOKS.action, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ action: "UPDATE_SETTINGS", settings: globalSettings })
