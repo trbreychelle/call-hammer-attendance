@@ -123,6 +123,7 @@
         };
 
         function startIdleTracker() {
+            // Existing logic: check idle minutes every minute
             setInterval(() => {
                 if (currentUser && currentUser.role !== 'admin' && globalSettings.enabled && currentState === 'WORKING') {
                     idleMinutes++;
@@ -131,8 +132,26 @@
                     }
                 }
             }, 60000);
+
+            // Existing logic: reset on local interaction
             document.onmousemove = () => idleMinutes = 0;
             document.onkeypress = () => idleMinutes = 0;
+
+            // ✅ NEW: reset idle if extension reports recent activity (from ANY tab)
+            setInterval(() => {
+                if (!currentUser || currentUser.role === 'admin') return;
+                if (!globalSettings.enabled || currentState !== 'WORKING') return;
+
+                const ts = parseInt(localStorage.getItem("chl_last_activity") || "0", 10);
+                if (!ts) return;
+
+                // if there was activity within the last 60s, reset idle
+                if ((Date.now() - ts) < 60000) {
+                    idleMinutes = 0;
+                    // optional: auto-close modal if it’s open
+                    document.getElementById('idleModal').classList.add('hidden');
+                }
+            }, 5000);
         }
 
         async function handleLogin() {
