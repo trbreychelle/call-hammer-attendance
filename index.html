@@ -224,13 +224,16 @@
             return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
         }
 
+        // ✅ Helper to send webhook - NOW INCLUDES eventId
         async function sendWebhook(actionName) {
             if (!currentUser) return;
+            const eventId = crypto.randomUUID(); // ✅ Added UUID here
             try {
                 await fetch(WEBHOOK_ACTION, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
+                        eventId, // ✅ Included in body
                         agent: currentUser.name,
                         email: currentUser.email,
                         action: actionName,
@@ -323,6 +326,7 @@
             if (currentState !== 'OFFLINE') runUIUpdate();
             saveSession();
 
+            // ✅ This calls sendWebhook, which now has the eventId
             await sendWebhook(act);
 
             if (currentUser.role === 'admin') fetchTeamStatus();
