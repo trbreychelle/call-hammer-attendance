@@ -110,7 +110,7 @@
         let currentUser = null;
         let mainInterval = null;
         
-        let currentState = 'OFFLINE'; // OFFLINE, WORKING, BREAK
+        let currentState = 'OFFLINE'; // OFFLINE, WORKING, BREAK, IDLE
         let totalWorkSeconds = 0;
         let totalBreakSeconds = 0;
         let lastTimestamp = null; 
@@ -130,7 +130,7 @@
                 if (currentUser && currentUser.role !== 'admin' && globalSettings.enabled && currentState === 'WORKING') {
                     idleMinutes++;
                     if (idleMinutes >= globalSettings.threshold) {
-                        document.getElementById('idleModal').classList.remove('hidden');
+                        triggerIdle();
                     }
                 }
             }, 60000);
@@ -224,8 +224,77 @@
             return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
         }
 
+        async function sendWebhook(actionName) {
+            if (!currentUser) return;
+            try {
+                await fetch(WEBHOOK_ACTION, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        agent: currentUser.name,
+                        email: currentUser.email,
+                        action: actionName,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+            } catch (e) {
+                console.error("Webhook error:", e);
+            }
+        }
+
+        let idleTriggered = false;
+
+        function triggerIdle() {
+            if (!currentUser) return;
+            if (currentState !== 'WORKING') return;
+            if (idleTriggered) return;
+
+            idleTriggered = true;
+
+            // bank work time until now
+            const now = Date.now();
+            if (lastTimestamp) {
+                const diff = Math.floor((now - lastTimestamp) / 1000);
+                totalWorkSeconds += diff;
+            }
+
+            // switch to IDLE (pauses work timer)
+            currentState = 'IDLE';
+            lastTimestamp = now;
+
+            updateUIForState();
+            runUIUpdate();
+            saveSession();
+
+            // show modal
+            document.getElementById('idleModal').classList.remove('hidden');
+
+            // send webhook
+            sendWebhook("Idle Detected");
+        }
+
+        function resumeFromIdle() {
+            if (!currentUser) return;
+            if (currentState !== 'IDLE') return;
+
+            idleMinutes = 0;
+            idleTriggered = false;
+
+            currentState = 'WORKING';
+            lastTimestamp = Date.now();
+
+            document.getElementById('idleModal').classList.add('hidden');
+
+            updateUIForState();
+            runUIUpdate();
+            saveSession();
+
+            sendWebhook("Resume from Idle");
+        }
+
         async function sendAction(act) {
             const now = Date.now();
+            idleTriggered = false;
             
             // Bank current time before state switch
             if (lastTimestamp) {
@@ -246,6 +315,7 @@
                 currentState = 'OFFLINE';
                 clearInterval(mainInterval);
                 localStorage.removeItem('chl_session');
+                document.getElementById('idleModal').classList.add('hidden');
             }
 
             lastTimestamp = now;
@@ -253,16 +323,8 @@
             if (currentState !== 'OFFLINE') runUIUpdate();
             saveSession();
 
-            await fetch(WEBHOOK_ACTION, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ 
-                    agent: currentUser.name, 
-                    email: currentUser.email, 
-                    action: act, 
-                    timestamp: new Date().toISOString() 
-                })
-            });
+            await sendWebhook(act);
+
             if (currentUser.role === 'admin') fetchTeamStatus();
         }
 
@@ -289,6 +351,18 @@
                 breakCont.classList.remove('hidden');
                 btnIn.classList.add('hidden');
                 btnBreak.classList.add('hidden');
+                btnResume.classList.remove('hidden');
+                btnOut.classList.remove('hidden');
+            } else if (currentState === 'IDLE') {
+                statusDisp.innerText = "Status: Idle";
+                statusDisp.className = "text-orange-600 text-sm italic font-bold";
+              
+                breakCont.classList.add('hidden');
+              
+                btnIn.classList.add('hidden');
+                btnBreak.classList.add('hidden');
+              
+                // show Resume + Clock Out
                 btnResume.classList.remove('hidden');
                 btnOut.classList.remove('hidden');
             } else {
@@ -376,7 +450,16 @@
         }
 
         function toggleSettingsModal() { document.getElementById('settingsModal').classList.toggle('hidden'); }
-        function resetIdle() { idleMinutes = 0; document.getElementById('idleModal').classList.add('hidden'); }
+        
+        function resetIdle() {
+            if (currentState === 'IDLE') {
+                resumeFromIdle();
+                return;
+            }
+            idleMinutes = 0;
+            document.getElementById('idleModal').classList.add('hidden');
+        }
+
         function logout() { localStorage.removeItem('chl_session'); location.reload(); }
     </script>
 </body>
