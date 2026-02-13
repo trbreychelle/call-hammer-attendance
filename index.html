@@ -43,9 +43,11 @@
             <div id="timer" class="text-7xl font-bold mb-6 text-gray-800 tracking-tight">00:00:00</div>
             
             <div id="breakTimerContainer" class="hidden mb-8 p-4 bg-yellow-50 rounded-2xl inline-block border border-yellow-200">
-                <div class="text-[10px] uppercase font-bold text-yellow-600 mb-1">Break Duration (20m Paid)</div>
+                <div class="text-[10px] uppercase font-bold text-yellow-600 mb-1">Break Duration</div>
                 <div id="breakTimer" class="text-3xl font-mono font-bold text-yellow-700">00:00:00</div>
-                <div id="deductionNotice" class="text-[10px] text-red-500 font-bold mt-1 hidden">EXCESS BREAK BEING DEDUCTED</div>
+                <div id="overbreakNotice" class="text-[10px] text-red-600 font-extrabold mt-1 hidden">
+                    OVERBREAK (30 MINUTES EXCEEDED)
+                </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4">
@@ -103,7 +105,7 @@
         const WEBHOOK_ACTION = "https://automate.callhammerleads.com/webhook/action";
         const WEBHOOK_MONITOR = "https://automate.callhammerleads.com/webhook/get_team_status";
         
-        const MAX_PAID_BREAK = 20 * 60; // 20 minutes in seconds
+        const MAX_BREAK_SECONDS = 30 * 60; // 30 minutes
 
         let currentUser = null;
         let mainInterval = null;
@@ -184,6 +186,7 @@
 
         function runUIUpdate() {
             if (mainInterval) clearInterval(mainInterval);
+
             mainInterval = setInterval(() => {
                 const now = Date.now();
                 const diffInSeconds = Math.floor((now - lastTimestamp) / 1000);
@@ -197,19 +200,19 @@
                     currentBreak += diffInSeconds;
                 }
 
-                // Logic: Deduct excess break time from work hours
-                let deduction = 0;
-                if (currentBreak > MAX_PAID_BREAK) {
-                    deduction = currentBreak - MAX_PAID_BREAK;
-                    document.getElementById('deductionNotice').classList.remove('hidden');
+                // ✅ Work timer does NOT deduct break. It just pauses during BREAK.
+                document.getElementById('timer').innerText = formatTime(currentWork);
+                document.getElementById('breakTimer').innerText = formatTime(currentBreak);
+
+                // ✅ Overbreak warning if break exceeds 30 minutes
+                const overbreakEl = document.getElementById('overbreakNotice');
+                if (currentState === 'BREAK' && currentBreak >= MAX_BREAK_SECONDS) {
+                    overbreakEl.classList.remove('hidden');
                     document.getElementById('breakTimer').classList.add('text-red-600');
                 } else {
-                    document.getElementById('deductionNotice').classList.add('hidden');
+                    overbreakEl.classList.add('hidden');
                     document.getElementById('breakTimer').classList.remove('text-red-600');
                 }
-
-                document.getElementById('timer').innerText = formatTime(currentWork - deduction);
-                document.getElementById('breakTimer').innerText = formatTime(currentBreak);
             }, 1000);
         }
 
