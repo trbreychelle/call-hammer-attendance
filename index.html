@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Call Hammer Leads - Attendance Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { background-color: #FEF3C7; font-family: sans-serif; }
         .bg-chl-blue { background-color: #2563EB; }
@@ -104,6 +105,10 @@
         const WEBHOOK_AUTH = "https://automate.callhammerleads.com/webhook/auth";
         const WEBHOOK_ACTION = "https://automate.callhammerleads.com/webhook/action";
         const WEBHOOK_MONITOR = "https://automate.callhammerleads.com/webhook/get_team_status";
+
+        const SUPABASE_URL = "https://api.supabase.callhammerleads.com";
+const SUPABASE_ANON_KEY = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3MTcwMjI2MCwiZXhwIjo0OTI3Mzc1ODYwLCJyb2xlIjoiYW5vbiJ9.XuWCdGs0XSSSlWhsF6gR4gHMp50C-v6xra9ABgSVRoU";
+const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
         
         const MAX_BREAK_SECONDS = 30 * 60; // 30 minutes
 
@@ -157,20 +162,64 @@
         }
 
         async function handleLogin() {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
-            const res = await fetch(WEBHOOK_AUTH, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
-            if (data.authenticated) {
-                currentUser = data;
-                showDashboard();
-                saveSession();
-            } else { alert("Invalid Credentials"); }
+    const email = document.getElementById('email').value.trim().toLowerCase();
+    const password = document.getElementById('password').value;
+
+    if (!email || !password) {
+        alert("Missing email or password.");
+        return;
+    }
+
+    if (!supabaseClient) {
+        alert("Supabase client not initialized.");
+        return;
+    }
+
+    try {
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) {
+            throw error;
         }
+
+        const authUser = data?.user;
+        if (!authUser) {
+            throw new Error("Login failed: user missing.");
+        }
+
+        const { data: profile, error: profileError } = await supabaseClient
+            .from('profiles')
+            .select('id, auth_user_id, organization_id, email, full_name, display_name, role, is_active')
+            .eq('auth_user_id', authUser.id)
+            .single();
+
+        if (profileError) {
+            throw profileError;
+        }
+
+        if (!profile || !profile.is_active) {
+            throw new Error("This account is inactive.");
+        }
+
+        currentUser = {
+            id: profile.id,
+            auth_user_id: profile.auth_user_id,
+            organization_id: profile.organization_id,
+            email: profile.email,
+            name: profile.display_name || profile.full_name || profile.email,
+            role: profile.role
+        };
+
+        showDashboard();
+        saveSession();
+    } catch (err) {
+        console.error("Tracker login failed:", err);
+        alert(err?.message || "Invalid Credentials");
+    }
+}
 
         function showDashboard() {
             document.getElementById('loginView').classList.add('hidden');
