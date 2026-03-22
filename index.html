@@ -124,10 +124,10 @@ const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_U
         let allAgentsData = [];
         let globalSettings = { enabled: true, threshold: 480 }; // 8 hours
 
-        window.onload = function() {
-            loadSession();
-            startIdleTracker();
-        };
+        window.onload = async function() {
+    await loadSession();
+    startIdleTracker();
+};
 
         function startIdleTracker() {
             // Existing logic: check idle minutes every minute
@@ -440,20 +440,60 @@ const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_U
             }));
         }
 
-        function loadSession() {
-            const saved = localStorage.getItem('chl_session');
-            if (saved) {
-                const s = JSON.parse(saved);
-                currentUser = s.user;
-                totalWorkSeconds = s.totalWorkSeconds;
-                totalBreakSeconds = s.totalBreakSeconds;
-                lastTimestamp = s.lastTimestamp;
-                currentState = s.currentState;
-                showDashboard();
-                updateUIForState();
-                if (currentState !== 'OFFLINE') runUIUpdate();
-            }
+        async function loadSession() {
+    try {
+        if (!supabaseClient) return;
+
+        const { data, error } = await supabaseClient.auth.getSession();
+
+        if (error || !data?.session) {
+            localStorage.removeItem('chl_session');
+            currentUser = null;
+            return;
         }
+
+        const authUser = data.session.user;
+
+        const { data: profile, error: profileError } = await supabaseClient
+            .from('profiles')
+            .select('id, auth_user_id, organization_id, email, full_name, display_name, role, is_active')
+            .eq('auth_user_id', authUser.id)
+            .single();
+
+        if (profileError || !profile || !profile.is_active) {
+            localStorage.removeItem('chl_session');
+            currentUser = null;
+            return;
+        }
+
+        const saved = localStorage.getItem('chl_session');
+        if (saved) {
+            const s = JSON.parse(saved);
+            totalWorkSeconds = s.totalWorkSeconds || 0;
+            totalBreakSeconds = s.totalBreakSeconds || 0;
+            lastTimestamp = s.lastTimestamp || null;
+            currentState = s.currentState || 'OFFLINE';
+        }
+
+        currentUser = {
+            id: profile.id,
+            auth_user_id: profile.auth_user_id,
+            organization_id: profile.organization_id,
+            email: profile.email,
+            name: profile.display_name || profile.full_name || profile.email,
+            role: profile.role
+        };
+
+        showDashboard();
+        updateUIForState();
+        if (currentState !== 'OFFLINE') runUIUpdate();
+
+    } catch (e) {
+        console.warn('Tracker session validation failed:', e);
+        localStorage.removeItem('chl_session');
+        currentUser = null;
+    }
+}
 
         async function fetchTeamStatus() {
             try {
